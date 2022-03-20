@@ -4,15 +4,18 @@ pub extern crate paste;
 macro_rules! register_components {
     ( $index_type:ty, $( $component_type:ty ),* ) => {
         $crate::paste::paste! {
+            use std::collections::{VecDeque, HashMap, HashSet};
+            use std::fmt::Debug;
+
             #[derive(Debug)]
-            struct State {
+            pub struct State {
                 $(
                     [<$component_type:lower>]: HashMap<$index_type, $component_type>,
                 )*
             }
 
             impl State {
-                fn new() -> Self {
+                pub fn new() -> Self {
                     State {
                         $(
                             [<$component_type:lower>]: HashMap::new(),
@@ -20,19 +23,19 @@ macro_rules! register_components {
                     }
                 }
 
-                fn clear(&mut self) {
+                pub fn clear(&mut self) {
                     $(
                         self.[<$component_type:lower>].clear();
                     )*
                 }
 
                 $(
-                    fn [<get_ $component_type:lower>](&self, id: $index_type) -> Option<$component_type> {
+                    pub fn [<get_ $component_type:lower>](&self, id: $index_type) -> Option<$component_type> {
                         self.[<$component_type:lower>].get(&id).copied()
                     }
                 )*
 
-                fn commit_action(&mut self, action: &mut Action) {
+                pub fn commit_action(&mut self, action: &mut Action) {
                     $(
                         for (id, value) in action.updates.[<$component_type:lower>].drain() {
                             self.[<$component_type:lower>].insert(id, value);
@@ -68,35 +71,43 @@ macro_rules! register_components {
             }
 
             #[derive(Debug)]
-            struct Action {
+            pub struct Action {
                 updates: State,
                 removals: RemovedComponents,
             }
 
             impl Action {
-                fn new() -> Self {
+                pub fn new() -> Self {
                     Action {
                         updates: State::new(),
                         removals: RemovedComponents::new(),
                     }
                 }
 
-                fn clear(&mut self) {
+                pub fn clear(&mut self) {
                     self.updates.clear();
                     self.removals.clear();
                 }
 
                 $(
-                    fn [<insert_ $component_type:lower>](&mut self, id: $index_type, value: $component_type) {
+                    pub fn [<insert_ $component_type:lower>](&mut self, id: $index_type, value: $component_type) {
                         self.updates.[<$component_type:lower>].insert(id, value);
                     }
 
-                    fn [<remove_ $component_type:lower>](&mut self, id: $index_type) {
+                    pub fn [<get_updated_ $component_type:lower>](&self) -> &HashMap<$index_type, $component_type> {
+                        &self.updates.[<$component_type:lower>]
+                    } 
+
+                    pub fn [<remove_ $component_type:lower>](&mut self, id: $index_type) {
                         self.removals.[<$component_type:lower>].insert(id);
                     }
+
+                    pub fn [<get_removed_ $component_type:lower>](&self) -> &HashSet<$index_type> {
+                        &self.removals.[<$component_type:lower>]
+                    } 
                 )*
 
-                fn remove_all(&mut self, id: EntityId) {
+                pub fn remove_all(&mut self, id: EntityId) {
                     $(
                         self.[<remove_ $component_type:lower>](id);
                     )*
@@ -123,29 +134,29 @@ macro_rules! register_components {
             }
 
             #[derive(Debug, PartialEq, Eq)]
-            enum ActionStatus {
+            pub enum ActionStatus {
                 Accept,
                 Reject,
             }
 
             #[derive(Debug, PartialEq, Eq)]
-            enum RuleStatus {
+            pub enum RuleStatus {
                 KeepChecking,
                 StopChecking,
             }
 
-            type RuleFn<T> = fn(
+            pub type RuleFn<T> = fn(
                 &Action,
                 &State,
             ) -> (ActionStatus, RuleStatus, Vec<T>);
 
-            type ActionCreationFn<T> = fn(
+            pub type ActionCreationFn<T> = fn(
                 T,
                 &State,
                 &mut Action,
             );
 
-            struct Battle<T> {
+            pub struct Battle<T> {
                 populate_action: ActionCreationFn<T>,
                 action: Action,
                 state: State,
@@ -157,11 +168,11 @@ macro_rules! register_components {
             }
 
             impl<T: Debug> Battle<T> {
-                fn new(rules: Vec<RuleFn<T>>, populate_action: ActionCreationFn<T>) -> Self {
+                pub fn new(rules: Vec<RuleFn<T>>, populate_action: ActionCreationFn<T>) -> Self {
                     Battle::new_with_initial_state(rules, populate_action, State::new())
                 }
 
-                fn new_with_initial_state(rules: Vec<RuleFn<T>>, populate_action: ActionCreationFn<T>, state: State) -> Self {
+                pub fn new_with_initial_state(rules: Vec<RuleFn<T>>, populate_action: ActionCreationFn<T>, state: State) -> Self {
                     Battle {
                         action: Action::new(),
                         populate_action,
@@ -174,11 +185,11 @@ macro_rules! register_components {
                     }
                 }
 
-                fn enqueue_action(&mut self, action: T) {
+                pub fn enqueue_action(&mut self, action: T) {
                     self.pending_actions.push_back(action);
                 }
 
-                fn process_actions(&mut self) {
+                pub fn process_actions(&mut self) {
                     while let Some(action_type) = self.pending_actions.pop_front() {
                         println!("Found an action: {:?}", action_type);
                         (self.populate_action)(action_type, &self.state, &mut self.action);
